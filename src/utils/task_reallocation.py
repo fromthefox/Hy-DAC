@@ -1,6 +1,6 @@
 """
-Task粒度的组合重新分配算法.
-在每个Task完成后,根据上一个Task的实际执行时间,對設備在組之間進行邏輯的調整.
+Task粒度的組合重新分配算法.
+在每個Task完成後,根據上一次Task的實際執行時間,對設備在組之間進行邏輯的調整.
 接收參數:
 - prev_allocation: 上一個Task的分配方案,格式為Dict,示例: {"Group1": {"Device":[1,2,3], "Leader":[2], "Layers":(3,7)}, "Group2":...}
 - actual_times: 上一個Task的實際執行時間,格式為Dict,示例: {"Group1": 12.5, "Group2": 15.0, ...}
@@ -13,10 +13,6 @@ import math
 def compute_group_capacity(devices: List[int], C_values: Dict[int, float]) -> float:
     """計算組的總計算能力"""
     return sum(C_values[d] for d in devices)
-
-def estimate_layer_count(exec_time: float, group_capacity: float) -> float:
-    """根據執行時間反推目前層數分配"""
-    return exec_time * group_capacity
 
 def task_reallocation(
     prev_allocation: Dict[str, Dict],
@@ -52,8 +48,12 @@ def task_reallocation(
         devices = prev_allocation[group_name]["devices"]
         capacity = compute_group_capacity(devices, C_values)
         
-        # 計算目前分配的層數
-        layer_count = estimate_layer_count(exec_time, capacity)
+        # 直接從prev_allocation中獲取分配的層數（已知信息）
+        layer_range = prev_allocation[group_name].get("layers", (0, 0))
+        layer_count = layer_range[1] - layer_range[0] + 1 if layer_range[1] >= layer_range[0] else 0
+        
+        # 計算實際吞吐率（單位時間處理的層數）
+        throughput = layer_count / exec_time if exec_time > 0 else 0
         
         # 計算閒置率
         total_slot_time = exec_time + timing["idle_time"]
@@ -64,6 +64,7 @@ def task_reallocation(
             "idle_time": timing["idle_time"],
             "capacity": capacity,
             "layer_count": layer_count,
+            "throughput": throughput,
             "idle_ratio": idle_ratio,
             "devices": devices.copy(),
             "leader": prev_allocation[group_name]["leader"]
