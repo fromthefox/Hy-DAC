@@ -206,6 +206,7 @@ def dp_optimal_partition_leader_star(
         "groups": assignments
     }
 
+
 if __name__ == "__main__":
     # 这里的例子：
     # 模型：Llama-3-8B fp16
@@ -245,3 +246,87 @@ if __name__ == "__main__":
         print(f"[Group {idx}] leader={g.leader} devices={g.device_indices} "
               f"layers={g.layer_range} per_layer_time={g.per_layer_time:.6f} "
               f"stage_time={g.stage_time:.6f}")
+        
+"""
+# 均匀分配代码
+# 设备计算能力列表（按分配顺序：2*Pi4B, 3*Pi3B, 8*Pi2B）
+C = [5.0] * 2 + [4.0] * 3 + [3.0] * 8
+
+# 层分配列表（按用户指定）
+layers = [3] * 2 + [3] * 3 + [3] * 4 + [2] + [1] * 3
+
+# 计算每个阶段的时间
+times = [layers[i] / C[i] for i in range(13)]
+
+# 找出瓶颈（最大阶段时间）
+bottleneck = max(times)
+
+# 输出结果
+print("每个阶段时间:", times)
+print("瓶颈时间:", bottleneck)
+"""
+
+
+"""
+# 最优无分组DP分配算法
+
+import math
+
+
+def optimal_layer_allocation(C, M):
+    '''
+    使用DP计算最优层分配到N个设备，以最小化最大阶段时间。
+    假设设备按C降序排序，每个设备至少分配1层（但可调整）。
+    返回：(最小最大阶段时间, 层分配列表)
+    '''
+    N = len(C)
+    # 排序C降序（如果未排序）
+    C = sorted(C, reverse=True)
+    
+    # DP[i][j]: 使用前i个设备分配j层的最小最大阶段时间
+    INF = float('inf')
+    DP = [[INF] * (M + 1) for _ in range(N + 1)]
+    Prev = [[None] * (M + 1) for _ in range(N + 1)]
+    DP[0][0] = 0.0
+    
+    for i in range(1, N + 1):
+        for j in range(1, M + 1):
+            for k in range(1, j + 1):  # 每个设备至少1层，最大j层
+                if j - k >= 0 and DP[i-1][j-k] != INF:
+                    stage_time = k / C[i-1]
+                    candidate = max(DP[i-1][j-k], stage_time)
+                    if candidate < DP[i][j]:
+                        DP[i][j] = candidate
+                        Prev[i][j] = (j - k, k)  # 记录前状态和分配k层
+    
+    if DP[N][M] == INF:
+        raise ValueError("无法分配所有层。")
+    
+    # 回溯获取分配
+    allocations = []
+    cur_j = M
+    for i in range(N, 0, -1):
+        if Prev[i][cur_j] is None:
+            raise ValueError("回溯失败。")
+        prev_j, k = Prev[i][cur_j]
+        allocations.append(k)
+        cur_j = prev_j
+    
+    allocations.reverse()  # 恢复顺序（按C降序设备）
+    
+    return DP[N][M], allocations
+
+if __name__ == "__main__":
+    # 设备计算能力：2*Pi4B (5.0), 3*Pi3B (4.0), 8*Pi2B (3.0)
+    C = [5.0] * 2 + [4.0] * 3 + [3.0] * 8
+    M = 32  # 层数
+    
+    bottleneck, layers = optimal_layer_allocation(C, M)
+    
+    print("最优瓶颈时间:", bottleneck)
+    print("层分配 (按C降序设备):", layers)
+    # 计算每个阶段时间验证
+    times = [layers[i] / C[i] for i in range(len(C))]
+    print("每个阶段时间:", times)
+    print("实际最大时间:", max(times))
+"""
