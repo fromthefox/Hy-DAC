@@ -1,17 +1,17 @@
 """
-Task粒度的組合重新分配算法.
-在每個Task完成後,根據上一次Task的實際執行時間,對設備在組之間進行邏輯的調整.
-接收參數:
-- prev_allocation: 上一個Task的分配方案,格式為Dict,示例: {"Group1": {"Device":[1,2,3], "Leader":[2], "Layers":(3,7)}, "Group2":...}
-- actual_times: 上一個Task的實際執行時間,格式為Dict,示例: {"Group1": 12.5, "Group2": 15.0, ...}
-- C_values: 設備的計算能力,格式為Dict,示例: {"Device1": 5.0, "Device2": 4.0, ...}
+Task粒度的组合重新分配算法.
+在每个Task完成后,根据上一次Task的实际执行时间,对设备在组之间进行逻辑的调整.
+接收参数:
+- prev_allocation: 上一个Task的分配方案,格式为Dict,示例: {"Group1": {"Device":[1,2,3], "Leader":[2], "Layers":(3,7)}, "Group2":...}
+- actual_times: 上一个Task的实际执行时间,格式为Dict,示例: {"Group1": 12.5, "Group2": 15.0, ...}
+- C_values: 设备的计算能力,格式为Dict,示例: {"Device1": 5.0, "Device2": 4.0, ...}
 """
 
 from typing import Dict, List, Tuple
 import math
 
 def compute_group_capacity(devices: List[int], C_values: Dict[int, float]) -> float:
-    """計算組的總計算能力"""
+    """计算组的总计算能力"""
     return sum(C_values[d] for d in devices)
 
 def task_reallocation(
@@ -19,25 +19,25 @@ def task_reallocation(
     actual_times: Dict[str, Dict],
     C_values: Dict[int, float],
     total_layers: int,
-    threshold: float = 0.15,  # 15% 偏差閾值
+    threshold: float = 0.15,  # 15% 偏差阈值
     strategy: str = "greedy"
 ) -> Dict[str, Dict]:
     """
-    Task粒度設備重新分配
+    Task粒度设备重新分配
     
     Args:
-        prev_allocation: 上一個Task的分配方案
-        actual_times: 各Group的實際執行時間 {"Group_i": {"exec_time": x, "idle_time": y}}
-        C_values: 全局設備計算能力
-        total_layers: 當前Task的總層數（通常與模型層數相同）
-        threshold: 觸發重新分配的時間偏差閾值
+        prev_allocation: 上一个Task的分配方案
+        actual_times: 各Group的实际执行时间 {"Group_i": {"exec_time": x, "idle_time": y}}
+        C_values: 全局设备计算能力
+        total_layers: 当前Task的总层数（通常与模型层数相同）
+        threshold: 触发重新分配的时间偏差阈值
         strategy: "greedy" | "optimal_dp" | "flow_based"
     
     Returns:
         new_allocation: 新的分配方案
     """
     
-    # Step 1: 計算各Group的性能指標
+    # Step 1: 计算各Group的性能指标
     group_metrics = {}
     max_time = 0
     min_time = float('inf')
@@ -48,14 +48,14 @@ def task_reallocation(
         devices = prev_allocation[group_name]["devices"]
         capacity = compute_group_capacity(devices, C_values)
         
-        # 直接從prev_allocation中獲取分配的層數（已知信息）
+        # 直接从prev_allocation中获取分配的层数（已知信息）
         layer_range = prev_allocation[group_name].get("layers", (0, 0))
         layer_count = layer_range[1] - layer_range[0] + 1 if layer_range[1] >= layer_range[0] else 0
         
-        # 計算實際吞吐率（單位時間處理的層數）
+        # 计算实际吞吐率（单位时间处理的层数）
         throughput = layer_count / exec_time if exec_time > 0 else 0
         
-        # 計算閒置率
+        # 计算闲置率
         total_slot_time = exec_time + timing["idle_time"]
         idle_ratio = timing["idle_time"] / total_slot_time if total_slot_time > 0 else 0
         
@@ -74,14 +74,14 @@ def task_reallocation(
         min_time = min(min_time, exec_time)
         total_time += exec_time
     
-    # Step 2: 檢查是否需要重新分配
+    # Step 2: 检查是否需要重新分配
     imbalance_ratio = (max_time - min_time) / max_time if max_time > 0 else 0
     
     if imbalance_ratio < threshold:
-        # 負載均衡已足夠好，無需調整
+        # 负载均衡已足够好，无需调整
         return prev_allocation
     
-    # Step 3: 根據策略執行重新分配
+    # Step 3: 根据策略执行重新分配
     if strategy == "greedy":
         new_allocation = _greedy_reallocation(group_metrics, prev_allocation, C_values)
     elif strategy == "optimal_dp":
@@ -98,13 +98,13 @@ def _greedy_reallocation(
     C_values: Dict
 ) -> Dict:
     """
-    貪心策略：從快組中移出高性能設備到慢組
+    贪心策略：从快组中移出高性能设备到慢组
     
-    削峰：找出最慢的Group（max_time），將其設備移入
-    填谷：找出最快的Group（min_time + idle），從中移出設備
+    削峰：找出最慢的Group（max_time），将其设备移入
+    填谷：找出最快的Group（min_time + idle），从中移出设备
     """
     
-    # 找出最慢和最快的組
+    # 找出最慢和最快的组
     sorted_groups = sorted(
         group_metrics.items(),
         key=lambda x: x[1]["exec_time"],
@@ -117,23 +117,23 @@ def _greedy_reallocation(
     for group_name in prev_allocation.keys():
         new_allocation[group_name] = prev_allocation[group_name].copy()
     
-    # 策略1：從快組移出低性能設備到慢組
+    # 策略1：从快组移出低性能设备到慢组
     slowest_devices = group_metrics[slowest_group]["devices"]
     fastest_devices = group_metrics[fastest_group]["devices"]
     slowest_cap = group_metrics[slowest_group]["capacity"]
     fastest_cap = group_metrics[fastest_group]["capacity"]
     
-    # 找到最慢組中性能最低的設備和最快組中性能最高的設備
+    # 找到最慢组中性能最低的设备和最快组中性能最高的设备
     if len(fastest_devices) > 1:
-        # 從快組移出一個低性能設備
+        # 从快组移出一个低性能设备
         min_c_device = min(fastest_devices, key=lambda d: C_values[d])
         device_to_move = min_c_device
         
-        # 執行移動
+        # 执行移动
         new_allocation[fastest_group]["devices"].remove(device_to_move)
         new_allocation[slowest_group]["devices"].append(device_to_move)
         
-        # 如果移走的是Leader，重新選擇Leader
+        # 如果移走的是Leader，重新选择Leader
         if new_allocation[fastest_group]["leader"] == device_to_move:
             new_allocation[fastest_group]["leader"] = max(
                 new_allocation[fastest_group]["devices"],
@@ -150,11 +150,11 @@ def _optimal_dp_reallocation(
     total_layers: int
 ) -> Dict:
     """
-    DP策略：使用動態規劃重新優化所有設備的分配
-    類似fast_cold_start.py中的dp_optimal_partition_leader_star
+    DP策略：使用动态规划重新优化所有设备的分配
+    类似fast_cold_start.py中的dp_optimal_partition_leader_star
     """
     
-    # 收集所有設備和它們的實際容量
+    # 收集所有设备和它们的实际容量
     all_devices = []
     for group_data in prev_allocation.values():
         all_devices.extend(group_data["devices"])
@@ -163,7 +163,7 @@ def _optimal_dp_reallocation(
     C_list = [C_values[d] for d in all_devices]
     num_groups = len(prev_allocation)
     
-    # 調用DP分配（簡化版）
+    # 调用DP分配（简化版）
     min_bottleneck = float('inf')
     best_partition = None
     
@@ -171,7 +171,7 @@ def _optimal_dp_reallocation(
         max_stage_time = 0
         for group_devices in partition:
             group_capacity = sum(C_values[d] for d in group_devices)
-            layers_for_group = total_layers // num_groups  # 簡化假設均分
+            layers_for_group = total_layers // num_groups  # 简化假设均分
             stage_time = layers_for_group / group_capacity if group_capacity > 0 else float('inf')
             max_stage_time = max(max_stage_time, stage_time)
         
@@ -179,7 +179,7 @@ def _optimal_dp_reallocation(
             min_bottleneck = max_stage_time
             best_partition = partition
     
-    # 轉換回allocation格式
+    # 转换回allocation格式
     new_allocation = {}
     group_names = list(prev_allocation.keys())
     for i, group_name in enumerate(group_names):
@@ -196,7 +196,7 @@ def _optimal_dp_reallocation(
 
 
 def _generate_partitions(devices: List[int], num_groups: int, depth: int = 0):
-    """生成設備到num_groups個組的所有可能分割（簡化版，僅生成幾個候選）"""
+    """生成设备到num_groups个组的所有可能分割（简化版，仅生成几个候选）"""
     if num_groups == 1:
         yield [devices]
         return
@@ -204,7 +204,7 @@ def _generate_partitions(devices: List[int], num_groups: int, depth: int = 0):
     if len(devices) < num_groups:
         return
     
-    # 僅生成固定的幾個分割方案（避免組合爆炸）
+    # 仅生成固定的几个分割方案（避免组合爆炸）
     if num_groups == 2:
         for i in range(1, len(devices)):
             yield [devices[:i], devices[i:]]
@@ -216,7 +216,7 @@ def _generate_partitions(devices: List[int], num_groups: int, depth: int = 0):
 
 
 if __name__ == "__main__":
-    # 示例測試
+    # 示例测试
     C_values = {0: 5.0, 1: 5.0, 2: 4.0, 3: 4.0, 4: 4.0, 5: 3.0, 6: 3.0, 7: 3.0, 8: 3.0, 9: 3.0, 10: 3.0, 11: 3.0, 12: 3.0}
     
     prev_allocation = {
@@ -225,7 +225,7 @@ if __name__ == "__main__":
         "Group3": {"devices": [5, 6, 7, 8, 9, 10, 11, 12], "leader": 5, "layers": (22, 31)}
     }
     
-    # 模擬實際執行時間（Group2成為瓶頸）
+    # 模拟实际执行时间（Group2成为瓶颈）
     actual_times = {
         "Group1": {"exec_time": 2.0, "idle_time": 8.5},
         "Group2": {"exec_time": 10.0, "idle_time": 0.5},
