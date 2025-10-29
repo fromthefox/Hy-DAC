@@ -11,8 +11,8 @@ import torch
 import torch.nn.functional as F
 from safetensors import safe_open
 
-MODEL_PATH = "/Users/yhbian/Downloads/Models/Llama-3.2-1B/model.safetensors"
-PARAMS_PATH = "/Users/yhbian/Downloads/Models/Llama-3.2-1B/params.json"
+MODEL_PATH = "/Users/yhbian/Downloads/Models/Llama-3.2-3B"
+PARAMS_PATH = "/Users/yhbian/Downloads/Models/Llama-3.2-3B/params.json"
 
 NUM_DEVICES = 4
 OFFLINE_DEVICE = 1
@@ -65,11 +65,29 @@ def load_model_config(params_path: str) -> ModelConfig:
     )
 
 
-def load_model_weights(model_path: str) -> Dict[str, torch.Tensor]:
+def load_model_weights(model_dir: str) -> Dict[str, torch.Tensor]:
+    """支持加载分片的 safetensors 文件"""
     weights: Dict[str, torch.Tensor] = {}
-    with safe_open(model_path, framework="pt", device="cpu") as f:
-        for key in f.keys():
-            weights[key] = f.get_tensor(key)
+    
+    # 查找所有 safetensors 文件
+    model_path = Path(model_dir)
+    safetensor_files = sorted(model_path.glob("model-*.safetensors"))
+    
+    if not safetensor_files:
+        raise FileNotFoundError(f"未在 {model_dir} 找到 safetensors 文件")
+    
+    print(f"找到 {len(safetensor_files)} 个权重文件:")
+    for f in safetensor_files:
+        print(f"  - {f.name}")
+    
+    # 逐个加载每个分片
+    for safetensor_file in safetensor_files:
+        print(f"加载 {safetensor_file.name}...")
+        with safe_open(str(safetensor_file), framework="pt", device="cpu") as f:
+            for key in f.keys():
+                weights[key] = f.get_tensor(key)
+    
+    print(f"共加载 {len(weights)} 个权重张量")
     return weights
 
 # 新增: 通用嵌入权重解析
@@ -396,7 +414,7 @@ def main() -> None:
     print("=" * 60)
 
     config = load_model_config(PARAMS_PATH)
-    weights = load_model_weights(MODEL_PATH)
+    weights = load_model_weights(MODEL_PATH)  # ← 传入目录而不是文件
     embed_weight = get_embedding_weight(weights)
     print(f"模型维度: {config.dim}, 层数: {config.n_layers}, 注意力头: {config.n_heads}, KV 头: {config.n_kv_heads}")
     print_weight_evidence(weights)
