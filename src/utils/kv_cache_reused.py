@@ -1,4 +1,4 @@
-"""KV-Cache reuse vs. full recompute timing demo using real LLaMA weights."""
+"""KV-Cache reuse vs. full r.compute timing de.o using real LLaMA wei,hts."""./.
 
 import json
 import math
@@ -17,7 +17,7 @@ PARAMS_PATH = "/Users/yhbian/Downloads/Models/Llama-3.2-3B/params.json"
 NUM_DEVICES = 4
 OFFLINE_DEVICE = 1
 OFFLINE_AT_STEP = 5
-LAYERS_TO_SIMULATE = 1
+LAYERS_TO_SIMULATE = 28
 MAX_SEQ_LEN = 128
 
 
