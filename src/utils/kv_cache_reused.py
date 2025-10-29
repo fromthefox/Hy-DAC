@@ -11,8 +11,8 @@ import torch
 import torch.nn.functional as F
 from safetensors import safe_open
 
-MODEL_PATH = "/Users/fox/Downloads/Models/Llama-3.2-1B/model.safetensors"
-PARAMS_PATH = "/Users/fox/Downloads/Models/Llama-3.2-1B/params.json"
+MODEL_PATH = "/Users/yhbian/Downloads/Models/Llama-3.2-1B/model.safetensors"
+PARAMS_PATH = "/Users/yhbian/Downloads/Models/Llama-3.2-1B/params.json"
 
 NUM_DEVICES = 4
 OFFLINE_DEVICE = 1
@@ -155,7 +155,7 @@ def get_norm_weight(weights: Dict[str, torch.Tensor]) -> Optional[torch.Tensor]:
         if key.endswith("norm.weight") or key.endswith("ln_f.weight"):
             print(f"⚠️ 使用推测归一化权重: {key}")
             return weights[key]
-    print("⚠️ 未找到归一化权重，使用无权重 layer_norm。")
+    # print("⚠️ 未找到归一化权重，使用无权重 layer_norm。")
     return None
 
 
@@ -423,7 +423,8 @@ def main() -> None:
             devices_baseline = initialize_devices(config, NUM_DEVICES - 1)
             baseline_assignments = None
             baseline_needs_full_recompute = True
-
+        
+        # 复用 KV-Cache 路径
         reuse_elapsed = run_step(
             devices_reuse,
             tokens,
@@ -435,8 +436,9 @@ def main() -> None:
             read_cache=True,
             write_cache=True,
         )
-        reuse_times.append(reuse_elapsed)
-
+        
+        # 基线路径：掉线那步强制不使用缓存，之后才恢复
+        baseline_read_cache = not baseline_needs_full_recompute
         baseline_elapsed = run_step(
             devices_baseline,
             tokens,
@@ -445,18 +447,21 @@ def main() -> None:
             freqs_cis,
             embed_weight,
             baseline_assignments,
-            read_cache=not baseline_needs_full_recompute,
+            read_cache=baseline_read_cache,
             write_cache=True,
         )
-        baseline_times.append(baseline_elapsed)
+        
+        baseline_needs_full_recompute = False
 
         speedup = baseline_elapsed / reuse_elapsed if reuse_elapsed > 0 else float("inf")
         print(f"复用 KV-Cache: {reuse_elapsed:.4f}s | 全量重算: {baseline_elapsed:.4f}s | 加速比: {speedup:.2f}x")
 
         tokens.append((tokens[-1] + 1) % config.vocab_size)
 
-        baseline_needs_full_recompute = False
-
+        # 修复：记录每步耗时
+        reuse_times.append(reuse_elapsed)
+        baseline_times.append(baseline_elapsed)
+    
     total_reuse = sum(reuse_times)
     total_baseline = sum(baseline_times)
     avg_reuse = total_reuse / len(reuse_times)
