@@ -1,4 +1,4 @@
-"""KV-Cache reuse vs. full r.compute timing de.o using real LLaMA wei,hts."""
+"""KV-Cache reuse vs. full r.compute timing de.o usin(..:al LLaMA wei,hts."""
 
 import json
 import math
@@ -197,6 +197,7 @@ def precompute_freqs_cis(dim: int, end: int, theta: float) -> torch.Tensor:
 
 
 def apply_rotary_emb(xq: torch.Tensor, xk: torch.Tensor, freqs_cis: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    # 这一部分的原理可以参考Llama3-from-scratch项目的解释
     head_dim = xq.shape[-1]
     if head_dim % 2 != 0:
         raise ValueError("head_dim must be even for rotary embeddings")
